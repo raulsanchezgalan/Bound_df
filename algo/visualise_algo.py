@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from util.box import Box
+from util.function_preprocessing import get_grad, get_Hess, make_function
+from sympy import symbols, Matrix, diff
+from util.function_bounding import get_max_grad, get_max_Hess
 
 
 def algo(f, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3):
@@ -69,6 +72,7 @@ if __name__ == '__main__':
     f = lambda x: x[0]**2 + x[1]**2 - 1
     grad_f = lambda x: [2*x[0], 2*x[1]]
     Hess_f = lambda x: np.array([[2, 0], [0, 2]])
+
     bottom_left_vertex = [-2, -2]
     box_length = 4
     box_numbers = [1, 1]
@@ -77,3 +81,18 @@ if __name__ == '__main__':
 
     lower_bound = algo(f, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3)
     print("Lower bound for |grad_f|_1:", lower_bound)
+
+    # x0, x1 = symbols('x0 x1')
+    # vars = [x0, x1]
+    # f_expr = ((x0 ** 3 - x0 * x1 ** 2 + x1 + 1) ** 2 * (x0 ** 2 + x1 ** 2 - 1) + x1 ** 2 - 5)
+    # grad_f = get_grad(f_expr, vars)
+    # Hess_f = get_Hess(f_expr, vars)
+    # bounds = [[-3,-3], [3,3]]
+    # max_grad_norm = get_max_grad(f_expr, vars, bounds)
+    # max_Hess_norm = get_max_Hess(f_expr, vars, bounds)
+    #
+    # lower_bound = algo(make_function(f_expr, vars), grad_f, Hess_f, [-3, -3], 6, [1,1], max_grad_norm, max_Hess_norm)
+    # print("Lower bound for |grad_f|_1:", lower_bound)
+
+
+
