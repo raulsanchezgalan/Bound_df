@@ -12,6 +12,26 @@ def get_smallest_box_length(boxes):
 
 
 def algo(f_expr, vars, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3, use_local_bounds=True, visualise=False):
+    '''
+    An algorithm computing a lower bound for |grad_f|_1 on a subset of n-dimensional
+    space defined by bottom_left_vertex, box_length, box_numbers.
+
+    :param f_expr: The function f defining the variety M=Z(f) in n-dimensional space
+    as a sympy polynomial
+    :param vars: A list of variables x0, x1, ...
+    :param grad_f: Gradient of f
+    :param Hess_f: Hessian of f
+    :param bottom_left_vertex: A point in n-dim space marking the bottom-left vertex
+    of a large box on which a bound for grad_f is sought
+    :param box_length: Length of initial boxes which cover the large box
+    :param box_numbers: Number of initial boxes in each direction
+    :param M2, M3: Constants defining algorithm requirements (these variables are not
+    accessed if use_local_bounds=True)
+    :param use_local_bounds: If true, use local bounds for grad and Hess
+    :param visualise: If true, save png image after every step (only works in dimension 2)
+    :return: A lower bound for |grad_f|_1 on M.
+    '''
+
     f = make_function(f_expr, vars)
 
     N = len(bottom_left_vertex)
@@ -90,28 +110,15 @@ def algo(f_expr, vars, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbe
 
 
 if __name__ == '__main__':
-    # x0, x1 = symbols('x0 x1')
-    # vars = [x0, x1]
-    # f_expr = x0**2 + x1**2 - 1
-    #
-    # grad_f = get_grad(f_expr, vars)
-    # Hess_f = get_Hess(f_expr, vars)
-    # bounds = [[-2, -2], [2, 2]]
-    # max_grad_norm = get_max_grad(f_expr, vars, bounds)
-    # max_Hess_norm = get_max_Hess(f_expr, vars, bounds)
-    #
-    # lower_bound = algo(f_expr, vars, grad_f, Hess_f, [-2, -2], 4, [1, 1], max_grad_norm, max_Hess_norm)
-    # print("Lower bound for |grad_f|_1:", lower_bound)
-
     x0, x1 = symbols('x0 x1')
     vars = [x0, x1]
-    f_expr = ((x0 ** 3 - x0 * x1 ** 2 + x1 + 1) ** 2 * (x0 ** 2 + x1 ** 2 - 1) + x1 ** 2 - 5)
+    f_expr = x0**2 + x1**2 - 1
+
     grad_f = get_grad(f_expr, vars)
     Hess_f = get_Hess(f_expr, vars)
-    bounds = [[-3, -3], [3, 3]]
+    bounds = [[-2, -2], [2, 2]]
     max_grad_norm = get_max_grad(f_expr, vars, bounds)
     max_Hess_norm = get_max_Hess(f_expr, vars, bounds)
-    print(f'max_Hess_norm = {max_Hess_norm}')
 
-    lower_bound = algo(f_expr, vars, grad_f, Hess_f, [-3, -3], 6, [1, 1], max_grad_norm, max_Hess_norm)
-    print("Lower bound for |grad_f|_1:", lower_bound)
+    lower_bound = algo(f_expr, vars, grad_f, Hess_f, [-2, -2], 4, [1, 1], max_grad_norm, max_Hess_norm)
+    print("Lower bound for |grad_f|_1:", lower_bound) # gives 1.75
