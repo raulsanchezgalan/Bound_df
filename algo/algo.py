@@ -1,25 +1,19 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from util.box import Box
 from util.function_preprocessing import get_grad, get_Hess, make_function
-from sympy import symbols, Matrix, diff
+from sympy import symbols
 from util.function_bounding import get_max_grad, get_max_Hess
+import datetime
 
 
-def algo(f, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3):
-    '''
-    An algorithm computing a lower bound for |grad_f|_1 on a subset of n-dimensional
-    space defined by bottom_left_vertex, box_length, box_numbers.
+def get_smallest_box_length(boxes):
+    return min(np.min(box.side_lengths) for box in boxes)
 
-    :param f: The function f defining the variety M=Z(f) in n-dimensional space
-    :param grad_f: Gradient of f
-    :param Hess_f: Hessian of f
-    :param bottom_left_vertex: A point in n-dim space marking the bottom-left vertex
-    of a large box on which a bound for grad_f is sought
-    :param box_length: Length of initial boxes which cover the large box
-    :param box_numbers: Number of initial boxes in each direction
-    :param M2, M3: Constants defining algorithm requirements
-    :return: A lower bound for |grad_f|_1 on M.
-    '''
+
+def algo(f_expr, vars, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3, use_local_bounds=True, visualise=False):
+    f = make_function(f_expr, vars)
+
     N = len(bottom_left_vertex)
 
     initial_boxes = []
@@ -35,24 +29,52 @@ def algo(f, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3)
 
     while NewBoxes:
         if steps % 100 == 0:
-            print(steps)
+            print(f'{datetime.datetime.now()}. Steps: {steps}')
         steps += 1
         CurrentBox = NewBoxes.pop()
         m = CurrentBox.midpoint()
         epsilon = np.linalg.norm(CurrentBox.side_lengths)
 
+        if use_local_bounds:
+            vertices = CurrentBox.vertices()
+            box_bounds = [(np.min(vertices[:, i]), np.max(vertices[:, i])) for i in range(N)]
+            box_max_grad = get_max_grad(f_expr, symbols(' '.join(f'x{i}' for i in range(N))), box_bounds)
+            box_max_Hess = get_max_Hess(f_expr, symbols(' '.join(f'x{i}' for i in range(N))), box_bounds)
+        else:
+            box_max_grad = M2
+            box_max_Hess = M3
+
         grad_norm = np.linalg.norm(grad_f(m), ord=2)
         f_abs = abs(f(m))
 
-        if f_abs > np.sqrt(N) * epsilon * M2:
+        if f_abs > np.sqrt(N) * epsilon * box_max_grad:
             CaseOneBoxes.append(CurrentBox)
-        elif grad_norm > N ** (3/2) * epsilon * M3:
+        elif grad_norm > N ** (3 / 2) * epsilon * box_max_Hess:
             CaseTwoBoxes.append(CurrentBox)
         else:
-            print(f'Cannot decide on this box: {CurrentBox}')
-            print(f'f_abs > np.sqrt(N) * epsilon * M2 ... {f_abs}>{np.sqrt(N)} * {epsilon} * {M3}={np.sqrt(N) * epsilon * M3}')
-            print(f'grad_norm > N ** (3/2) * epsilon * M3 ... {grad_norm}>{N ** (3/2)} * {epsilon} * {M3}={N ** (3/2) * epsilon * M3}')
             NewBoxes.extend(CurrentBox.subdivide())
+
+        if visualise and N == 2:
+            fig, ax = plt.subplots(figsize=(8, 8))
+            x = np.linspace(bottom_left_vertex[0], bottom_left_vertex[0] + box_length * box_numbers[0], 500)
+            y = np.linspace(bottom_left_vertex[1], bottom_left_vertex[1] + box_length * box_numbers[1], 500)
+            X, Y = np.meshgrid(x, y)
+            Z = f([X, Y])
+            ax.contour(X, Y, Z, levels=[0], colors='blue')
+
+            for box, color in [(NewBoxes, 'gray'), (CaseOneBoxes, 'green'), (CaseTwoBoxes, 'red')]:
+                for b in box:
+                    bl = b.bottom_left_vertex
+                    sl = b.side_lengths
+                    rect = plt.Rectangle(bl, sl[0], sl[1], linewidth=1, edgecolor=color, facecolor='none')
+                    ax.add_patch(rect)
+
+            ax.set_xlim(bottom_left_vertex[0], bottom_left_vertex[0] + box_length * box_numbers[0])
+            ax.set_ylim(bottom_left_vertex[1], bottom_left_vertex[1] + box_length * box_numbers[1])
+            ax.set_aspect('equal', adjustable='box')
+            ax.set_title(f'Iteration {steps}')
+            plt.savefig(f'algo_step_{steps:04}.png')
+            plt.close(fig)
 
     min_grad_norm = np.inf
     for box in CaseTwoBoxes:
@@ -61,20 +83,24 @@ def algo(f, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3)
         if grad_norm < min_grad_norm:
             min_grad_norm = grad_norm
 
+    print(f'Smallest CaseOneBoxes box length: {get_smallest_box_length(CaseOneBoxes)}')
+    print(f'Smallest CaseTwoBoxes box length: {get_smallest_box_length(CaseTwoBoxes)}')
+
     return min_grad_norm
 
 
 if __name__ == '__main__':
-    # f = lambda x: x[0]**2+x[1]**2-1
-    # grad_f = lambda x: [2*x[0], 2*x[1]]
-    # Hess_f = lambda x: np.array([[2,0], [0,2]])
-    # bottom_left_vertex = [-2, -2]
-    # box_length = 4
-    # box_numbers = [1, 1]
-    # M2 = np.sqrt(8)
-    # M3 = np.linalg.norm(np.array([[2,0], [0,2]]), ord=2)
+    # x0, x1 = symbols('x0 x1')
+    # vars = [x0, x1]
+    # f_expr = x0**2 + x1**2 - 1
     #
-    # lower_bound = algo(f, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3)
+    # grad_f = get_grad(f_expr, vars)
+    # Hess_f = get_Hess(f_expr, vars)
+    # bounds = [[-2, -2], [2, 2]]
+    # max_grad_norm = get_max_grad(f_expr, vars, bounds)
+    # max_Hess_norm = get_max_Hess(f_expr, vars, bounds)
+    #
+    # lower_bound = algo(f_expr, vars, grad_f, Hess_f, [-2, -2], 4, [1, 1], max_grad_norm, max_Hess_norm)
     # print("Lower bound for |grad_f|_1:", lower_bound)
 
     x0, x1 = symbols('x0 x1')
@@ -85,6 +111,7 @@ if __name__ == '__main__':
     bounds = [[-3, -3], [3, 3]]
     max_grad_norm = get_max_grad(f_expr, vars, bounds)
     max_Hess_norm = get_max_Hess(f_expr, vars, bounds)
+    print(f'max_Hess_norm = {max_Hess_norm}')
 
-    lower_bound = algo(make_function(f_expr, vars), grad_f, Hess_f, [-3, -3], 6, [1, 1], max_grad_norm, max_Hess_norm)
+    lower_bound = algo(f_expr, vars, grad_f, Hess_f, [-3, -3], 6, [1, 1], max_grad_norm, max_Hess_norm)
     print("Lower bound for |grad_f|_1:", lower_bound)

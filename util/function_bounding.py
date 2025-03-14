@@ -13,6 +13,7 @@ def get_max_grad(f_expr, vars, bounds):
         return -np.linalg.norm(grad)  # Minimize negative norm to maximize
 
     # Initial guess: midpoint of bounds
+    # x0 = (np.array(bounds[0])+np.array(bounds[1]))/2
     x0 = [(b[0] + b[1]) / 2 for b in bounds]
 
     # Optimize to find max gradient norm
