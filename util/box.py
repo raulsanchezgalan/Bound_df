@@ -4,6 +4,7 @@ class Box:
     def __init__(self, bottom_left_vertex, side_lengths):
         self.bottom_left_vertex = np.array(bottom_left_vertex, dtype=float)
         self.side_lengths = np.array(side_lengths, dtype=float)
+        self.grad_one_norm_at_midpoint = 0
 
         if self.bottom_left_vertex.shape != self.side_lengths.shape:
             raise ValueError("Dimension mismatch: vertex and side lengths must have the same dimension.")

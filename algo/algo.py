@@ -11,7 +11,7 @@ def get_smallest_box_length(boxes):
     return min(np.min(box.side_lengths) for box in boxes)
 
 
-def algo(f_expr, vars, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3, use_local_bounds=True, visualise=False):
+def algo(f_expr, vars, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbers, M2, M3, use_local_bounds=False, visualise=False, compute_boxwise_min=False):
     '''
     An algorithm computing a lower bound for |grad_f|_1 on a subset of n-dimensional
     space defined by bottom_left_vertex, box_length, box_numbers.
@@ -29,7 +29,8 @@ def algo(f_expr, vars, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbe
     accessed if use_local_bounds=True)
     :param use_local_bounds: If true, use local bounds for grad and Hess
     :param visualise: If true, save png image after every step (only works in dimension 2)
-    :return: A lower bound for |grad_f|_1 on M.
+    :param compute_boxwise_min:
+    :return: get_smallest_box_length(CaseOneBoxes), get_smallest_box_length(CaseTwoBoxes), min_grad_bound, min_hess_bound, boxwise_min (<- this is inf if compute_boxwise_min=False)
     '''
 
     f = make_function(f_expr, vars)
@@ -47,30 +48,45 @@ def algo(f_expr, vars, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbe
 
     steps = 0
 
+    min_grad_bound = np.inf
+    min_hess_bound = np.inf
+
+    boxwise_min = np.inf
+    minpoint = None
+
     while NewBoxes:
         if steps % 100 == 0:
             print(f'{datetime.datetime.now()}. Steps: {steps}')
         steps += 1
         CurrentBox = NewBoxes.pop()
         m = CurrentBox.midpoint()
-        epsilon = np.linalg.norm(CurrentBox.side_lengths)
+        epsilon = np.min(CurrentBox.side_lengths)
 
         if use_local_bounds:
             vertices = CurrentBox.vertices()
             box_bounds = [(np.min(vertices[:, i]), np.max(vertices[:, i])) for i in range(N)]
             box_max_grad = get_max_grad(f_expr, symbols(' '.join(f'x{i}' for i in range(N))), box_bounds)
+            min_grad_bound = min(box_max_grad, min_grad_bound)
             box_max_Hess = get_max_Hess(f_expr, symbols(' '.join(f'x{i}' for i in range(N))), box_bounds)
+            min_hess_bound = min(box_max_Hess, min_hess_bound)
         else:
             box_max_grad = M2
             box_max_Hess = M3
 
-        grad_norm = np.linalg.norm(grad_f(m), ord=2)
+        grad_norm = np.linalg.norm(grad_f(m), ord=1)
+        CurrentBox.grad_one_norm_at_midpoint = grad_norm
         f_abs = abs(f(m))
 
         if f_abs > np.sqrt(N) * epsilon * box_max_grad:
             CaseOneBoxes.append(CurrentBox)
         elif grad_norm > N ** (3 / 2) * epsilon * box_max_Hess:
+            CurrentBox.grad_one_norm_at_midpoint = grad_norm
             CaseTwoBoxes.append(CurrentBox)
+            if compute_boxwise_min:
+                if box_max_Hess * len(vars) ** (3 / 2) * epsilon / 2 < boxwise_min:
+                    minpoint = m
+                    # print(f'until now boxwise_min: {boxwise_min}, minpoint: {minpoint}, box_max_Hess: {box_max_Hess}, epsilon: {epsilon}')
+                boxwise_min = min(boxwise_min, box_max_Hess * len(vars) ** (3 / 2) * epsilon / 2)  #
         else:
             NewBoxes.extend(CurrentBox.subdivide())
 
@@ -96,17 +112,9 @@ def algo(f_expr, vars, grad_f, Hess_f, bottom_left_vertex, box_length, box_numbe
             plt.savefig(f'algo_step_{steps:04}.png')
             plt.close(fig)
 
-    min_grad_norm = np.inf
-    for box in CaseTwoBoxes:
-        m = box.midpoint()
-        grad_norm = np.linalg.norm(grad_f(m), ord=1)
-        if grad_norm < min_grad_norm:
-            min_grad_norm = grad_norm
-
-    print(f'Smallest CaseOneBoxes box length: {get_smallest_box_length(CaseOneBoxes)}')
-    print(f'Smallest CaseTwoBoxes box length: {get_smallest_box_length(CaseTwoBoxes)}')
-
-    return min_grad_norm
+    print(f'Boxwise min attained at box containing minpoint={minpoint}')
+    print(f'steps: {steps}')
+    return get_smallest_box_length(CaseOneBoxes), get_smallest_box_length(CaseTwoBoxes), min_grad_bound, min_hess_bound, boxwise_min
 
 
 if __name__ == '__main__':
@@ -120,5 +128,7 @@ if __name__ == '__main__':
     max_grad_norm = get_max_grad(f_expr, vars, bounds)
     max_Hess_norm = get_max_Hess(f_expr, vars, bounds)
 
-    lower_bound = algo(f_expr, vars, grad_f, Hess_f, [-2, -2], 4, [1, 1], max_grad_norm, max_Hess_norm)
-    print("Lower bound for |grad_f|_1:", lower_bound) # gives 1.75
+    smallest_case_one, smallest_case_two, _, _, _ = algo(f_expr, vars, grad_f, Hess_f, [-2, -2], 4, [1, 1], max_grad_norm, max_Hess_norm, use_local_bounds=False, visualise=False)
+    print(f'Smallest case one box: {smallest_case_one}; smallest case two: {smallest_case_two}')
+    lower_bound = max_Hess_norm*len(vars)**(3/2)*smallest_case_two/2
+    print(f"Lower bound for |grad_f|_1:", lower_bound)
