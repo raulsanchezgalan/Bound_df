@@ -1,3 +1,14 @@
+# run_all.jl
+#
+# Standalone benchmark runner for Edwards weak feature size code:
+# - Wraps each example in try/catch so the script never stops early
+# - Prints a summary table including an error/status column
+#
+# Run:
+#   julia --depwarn=no run_all.jl
+# or
+#   julia run_all.jl
+
 using HomologyInferenceWithWeakFeatureSize
 using HomotopyContinuation
 using Printf
@@ -16,22 +27,38 @@ const USE_MONODROMY = false
 
 function run_example(name, F)
     start_time = time()
+    dim = length(variables(F[1]))
 
-    wfs = compute_weak_feature_size(
-        F;
-        maximum_bottleneck_order = MAX_ORDER,
-        threshold = THRESH,
-        solve_with_monodromy = USE_MONODROMY
-    )
-
-    elapsed = time() - start_time
-
-    return (
-        name = name,
-        dim = length(variables(F[1])),
-        wfs = wfs,
-        time = elapsed
-    )
+    try
+        wfs = compute_weak_feature_size(
+            F;
+            maximum_bottleneck_order = MAX_ORDER,
+            threshold = THRESH,
+            solve_with_monodromy = USE_MONODROMY,
+        )
+        elapsed = time() - start_time
+        return (
+            name = name,
+            dim = dim,
+            wfs = wfs,
+            time = elapsed,
+            status = "ok",
+        )
+    catch err
+        elapsed = time() - start_time
+        msg = sprint(showerror, err)
+        msg = replace(msg, '\n' => ' ')
+        if lastindex(msg) > 120
+            msg = msg[1:120] * "…"
+        end
+        return (
+            name = name,
+            dim = dim,
+            wfs = NaN,
+            time = elapsed,
+            status = msg,
+        )
+    end
 end
 
 # ============================================================
@@ -39,8 +66,7 @@ end
 # ============================================================
 
 function main()
-
-    println("\nRunning Edwards weak feature size benchmarks\n")
+    println("\nRunning Edwards weak feature size benchmarks (try/catch enabled)\n")
 
     @var x y z
 
@@ -81,9 +107,9 @@ function main()
     push!(results, run_example("M5", F5))
 
     # ------------------------------------------------------------
-    # M6
+    # M6 (shifted ellipse)
     # ------------------------------------------------------------
-    F6 = [(x^2 + 2y^2 - 1) * (x^2 + 2y^2 - 3 - 1e-5)]
+    F6 = [(x^2 + 2y^2 - 1) * (((x - 2 - 1e-5)^2) + 2y^2 - 1)]
     push!(results, run_example("M6", F6))
 
     # ============================================================
@@ -91,19 +117,21 @@ function main()
     # ============================================================
 
     println("------------------------------------------------------------")
-    @printf("%-4s %-3s %-18s %-10s\n",
-            "ID", "N", "wfs_lower_bound", "time(s)")
+    @printf("%-4s %-3s %-18s %-10s %-s\n",
+            "ID", "N", "wfs_lower_bound", "time(s)", "status")
     println("------------------------------------------------------------")
 
     for r in results
-        @printf("%-4s %-3d %-18.10e %-10.4f\n",
+        @printf("%-4s %-3d %-18.10e %-10.4f %-s\n",
                 r.name,
                 r.dim,
                 r.wfs,
-                r.time)
+                r.time,
+                r.status)
     end
 
     println("------------------------------------------------------------\n")
 end
 
-main()
+# Avoid Julia world-age issues when running as a script
+Base.invokelatest(main)
