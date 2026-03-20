@@ -2,7 +2,9 @@
 
 # Bound_df
 
-Finds a lower bound of df on the real algebraic variety M = Z(f).
+Finds a lower bound of df on the real algebraic variety M = Z(f). Code pertaining to the preprint [https://arxiv.org/abs/2505.08427](https://arxiv.org/abs/2505.08427).
+Here are the relevant files in the repository:
 
-The file boundDF_summary contains the main code. The file Bound_df_with_examples contains some executions to see how each function works and the file bound_df_3D computes a lower bound on df on M for f a polynomial in 3 variables.
+* Folder `benchmarks`: run these Python and Julia files to compare different algorithms on a range of example varieties.
+* Run `examples/circle.py` with the flag `visualise=True` to reproduce the progress images when applying the algorithm to the circle that can be seen at the top of this `README.md`.
 
