@@ -10,9 +10,9 @@ Standalone reach lower-bound benchmark (Platt–Sánchez style), repo-independen
 
 Features:
 - Silent (no per-iteration prints)
-- Optional "local bounds" per box (sampling-based, fast-ish, robust)
+- Optional "local bounds" per box (deterministic grid-based)
 - Fixes SymPy->NumPy Hessian broadcasting bug (important for 3D, e.g. M4)
-- Runs examples M1–M6 and prints a summary table
+- Runs examples M1–M7 and prints a summary table
 
 
 """
@@ -93,31 +93,13 @@ def _spectral_norm_batch(H):
     return s[:, 0]
 
 
-def _box_vertices(bounds):
-    """
-    bounds: list of (low, high) length N
-    returns vertices array shape (2^N, N)
-    """
-    lows = np.array([b[0] for b in bounds], dtype=float)
-    highs = np.array([b[1] for b in bounds], dtype=float)
-    N = len(bounds)
-    verts = []
-    for mask in range(1 << N):
-        v = lows.copy()
-        for i in range(N):
-            if (mask >> i) & 1:
-                v[i] = highs[i]
-        verts.append(v)
-    return np.array(verts, dtype=float)
-
-
 # -----------------------------
 # Bounding routines
 # -----------------------------
 
-def _global_bounds_grid(bounds, grad_num, hess_num, pts_per_dim):
+def _bounds_grid(bounds, grad_num, hess_num, pts_per_dim):
     """
-    Crude global upper bounds on ||grad||_2 and ||Hess||_2 over the bounding box via grid sampling.
+    Heuristic upper bounds on ||grad||_2 and ||Hess||_2 over a box via tensor-grid sampling.
     """
     N = len(bounds)
     axes = [np.linspace(bounds[i][0], bounds[i][1], pts_per_dim) for i in range(N)]
@@ -133,36 +115,6 @@ def _global_bounds_grid(bounds, grad_num, hess_num, pts_per_dim):
     return M2, M3
 
 
-def _local_bounds_sample(box_bounds, grad_num, hess_num, rng, n_random_points=2):
-    """
-    Fast local upper bounds on ||grad||_2 and ||Hess||_2 over a box by sampling:
-    - all vertices
-    - midpoint
-    - a few random points
-    """
-    verts = _box_vertices(box_bounds)
-    mid = np.array([(a + b) / 2.0 for a, b in box_bounds], dtype=float)
-
-    pts = [mid]
-    pts.extend(list(verts))
-
-    if n_random_points > 0:
-        lows = np.array([a for a, _ in box_bounds], dtype=float)
-        highs = np.array([b for _, b in box_bounds], dtype=float)
-        r = lows + (highs - lows) * rng.random((n_random_points, len(box_bounds)))
-        pts.extend(list(r))
-
-    P = np.array(pts, dtype=float)
-
-    G = grad_num(P)
-    M2 = float(np.max(np.linalg.norm(G, axis=1)))
-
-    H = hess_num(P)
-    M3 = float(np.max(_spectral_norm_batch(H)))
-
-    return M2, M3
-
-
 # -----------------------------
 # Core algorithm (silent)
 # -----------------------------
@@ -173,10 +125,9 @@ def reach_algo_silent(
     bounds,
     *,
     use_local_bounds=True,
-    local_random_points=2,
+    local_grid_pts_per_dim=9,
     max_steps=600_000,
     global_grid_pts_per_dim=41,
-    seed=0,
 ):
     """
     Runs the subdivision algorithm and returns metrics.
@@ -186,7 +137,6 @@ def reach_algo_silent(
 
     t0 = time.perf_counter()
     N = len(vars_)
-    rng = np.random.default_rng(seed)
 
     # Numeric oracles
     f_num, grad_num, hess_num = _make_numeric_functions(f_expr, vars_)
@@ -197,7 +147,7 @@ def reach_algo_silent(
     pts = global_grid_pts_per_dim
     if N >= 3:
         pts = min(pts, 21)
-    M2_global, M3_global = _global_bounds_grid(bounds, grad_num, hess_num, pts_per_dim=pts)
+    M2_global, M3_global = _bounds_grid(bounds, grad_num, hess_num, pts_per_dim=pts)
     t_bounds = time.perf_counter() - tb0
 
     # Initial box = the whole bounds
@@ -230,8 +180,8 @@ def reach_algo_silent(
         # Bounds for this box
         if use_local_bounds:
             box_bounds = [(float(bl[i]), float(bl[i] + sl[i])) for i in range(N)]
-            M2_box, M3_box = _local_bounds_sample(
-                box_bounds, grad_num, hess_num, rng, n_random_points=local_random_points
+            M2_box, M3_box = _bounds_grid(
+                box_bounds, grad_num, hess_num, pts_per_dim=local_grid_pts_per_dim
             )
         else:
             M2_box, M3_box = M2_global, M3_global
@@ -288,7 +238,7 @@ def reach_algo_silent(
 
 
 # -----------------------------
-# Examples M1–M6
+# Examples M1–M7
 # -----------------------------
 
 def _examples():
@@ -320,6 +270,10 @@ def _examples():
     f6 = (x**2 + 2*y**2 - 1) * (((x - (2 + sp.Rational(1, 100000)))**2) + 2*y**2 - 1)
     b6 = [[-2.0, 5.0], [-3.0, 3.0]]
 
+    # M7
+    f7 = x**2 + y**2 + sp.Rational(1, 5) * (sp.cos(3 * x) + sp.cos(3 * y)) - 1
+    b7 = [[-2.0, 2.0], [-2.0, 2.0]]
+
     return {
         "M1": (f1, [x, y], b1),
         "M2": (f2, [x, y], b2),
@@ -327,6 +281,7 @@ def _examples():
         "M4": (f4, [x, y, z], b4),
         "M5": (f5, [x, y], b5),
         "M6": (f6, [x, y], b6),
+        "M7": (f7, [x, y], b7),
     }
 
 
@@ -337,10 +292,9 @@ def _examples():
 def run_all(
     *,
     use_local_bounds=True,
-    local_random_points=2,
+    local_grid_pts_per_dim=9,
     max_steps=600_000,
     global_grid_pts_per_dim=41,
-    seed=0,
 ):
     examples = _examples()
 
@@ -353,10 +307,9 @@ def run_all(
             vars_,
             bounds,
             use_local_bounds=use_local_bounds,
-            local_random_points=local_random_points,
+            local_grid_pts_per_dim=local_grid_pts_per_dim,
             max_steps=max_steps,
             global_grid_pts_per_dim=global_grid_pts_per_dim,
-            seed=seed,
         )
         print(
             f"{name:<4} {out['N']:>2d} "
@@ -371,11 +324,10 @@ def run_all(
 if __name__ == "__main__":
     # Recommended defaults:
     # - local bounds help a lot on M2/M4/M5
-    # - local_random_points=0 is fastest but less robust; 2 is a good compromise
+    # - local_grid_pts_per_dim=9 is the default local k^N grid
     run_all(
         use_local_bounds=True,
-        local_random_points=2,
+        local_grid_pts_per_dim=9,
         max_steps=600_000,
         global_grid_pts_per_dim=41,
-        seed=0,
     )
