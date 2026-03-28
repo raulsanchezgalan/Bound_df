@@ -6,4 +6,3 @@ Finds a lower bound of df on the real algebraic variety M = Z(f). Code pertainin
 Here are the relevant files in the repository:
 
 * Folder `benchmarks`: run these Python and Julia files to compare different algorithms on a range of example varieties.
-* Run `examples/circle.py` with the flag `visualise=True` to reproduce the progress images when applying the algorithm to the circle that can be seen at the top of this `README.md`.
