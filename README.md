@@ -1,4 +1,4 @@
-![animated of algorithm](./output/circle-vid.gif)
+![animated of algorithm](./img/circle-vid.gif)
 
 # Bound_df
 
@@ -7,4 +7,3 @@ Here are the relevant files in the repository:
 
 * Folder `benchmarks`: run these Python and Julia files to compare different algorithms on a range of example varieties.
 * Run `examples/circle.py` with the flag `visualise=True` to reproduce the progress images when applying the algorithm to the circle that can be seen at the top of this `README.md`.
-
