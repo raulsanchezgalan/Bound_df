@@ -11,7 +11,6 @@ using HomotopyContinuation
 # ============================================================
 
 const MAX_ORDER = 2
-const THRESH = 1e-8
 const USE_MONODROMY = false
 
 # ============================================================
@@ -26,7 +25,6 @@ function run_example(name, F; solve_with_monodromy = USE_MONODROMY)
         wfs = compute_weak_feature_size(
             F;
             maximum_bottleneck_order = MAX_ORDER,
-            threshold = THRESH,
             solve_with_monodromy = solve_with_monodromy,
         )
         elapsed = time() - start_time
